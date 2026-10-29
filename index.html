@@ -44,21 +44,7 @@ th,td{border:1px solid var(--bd);padding:6px;text-align:left}
     <button class="btn sec" id="otraIp" type="button">Cambiar solo la IP</button>
     <button class="btn sec" id="otroUa" type="button">Cambiar solo el user agent</button>
   </div>
-  <div class="msg" id="msg" aria-live="polite"></div>
-</div>
-
-<div class="card">
-  <h2>Demo: comparar los 4 niveles</h2>
-  <p class="lvl">Reinicia los bloqueos, hace 3 intentos fallidos con ana desde el dispositivo A en cada nivel y luego intenta entrar con la contraseña correcta desde el dispositivo B (otra IP y otro user agent).</p>
-  <button class="btn" id="demo">Ejecutar demo</button>
-  <div class="sc" id="out"></div>
-</div>
-
-<div class="card">
-  <h2>Demo: bloqueo global del nivel 5 (30 fallos en total)</h2>
-  <p class="lvl">Reinicia los bloqueos y hace 30 intentos fallidos con ana contra el nivel 5, rotando IP y user agent en cada uno (simula un ataque distribuido). El intento 31, con la contraseña correcta, debería salir bloqueado igual.</p>
-  <button class="btn" id="demoGlobal">Ejecutar demo del nivel 5</button>
-  <div class="sc" id="outGlobal"></div>
+  <button class="btn sec" id="reset" type="button">Resetear tiempo de bloqueo</button>
 </div>
 </main>
 <script>
@@ -68,8 +54,6 @@ const NIVELES=[
  {t:"Nivel 3",d:"Bloqueo por usuario + IP.",url:"/login/nivel3"},
  {t:"Nivel 4",d:"Bloqueo por usuario + IP + user agent.",url:"/login/nivel4"},
  {t:"Nivel 5",d:"Como el nivel 4, y además bloquea la cuenta al acumular 30 fallos en total, vengan de donde vengan (detecta ataques distribuidos).",url:"/login/nivel5"}];
-const DISP_A={ip:"10.0.0.1",userAgent:"Chrome/120 (Windows 11)"};
-const DISP_B={ip:"172.16.5.9",userAgent:"Safari/17 (iPhone)"};
 let n=0,timer=null;
 const $=id=>document.getElementById(id);
 const fmt=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
@@ -111,45 +95,16 @@ function otroUa(){
   setMsg("User agent cambiado. La IP sigue igual.","wa");
 }
 
-async function demo(){
-  const btn=$("demo");btn.disabled=true;$("out").innerHTML="Ejecutando...";
+async function resetBloqueo(){
+  clearInterval(timer);
   try{
     await post("/demo/reset",{});
-    const filas=[];
-    for(let i=0;i<NIVELES.length;i++){
-      const nivel=NIVELES[i];
-      let ultimo;
-      for(let k=0;k<3;k++)ultimo=await post(nivel.url,{username:"ana",password:"incorrecta",...DISP_A});
-      const b=await post(nivel.url,{username:"ana",password:"Ana2026#",...DISP_B});
-      filas.push(`<tr><td>${nivel.t}</td><td>${ultimo.status}</td><td>${b.status}</td><td>${b.ok?"Entró":"Bloqueado"}</td></tr>`);
-    }
-    $("out").innerHTML=`<table><tr><th>Nivel</th><th>3 fallos desde A</th><th>Correcta desde B</th><th>Resultado desde B</th></tr>${filas.join("")}</table>
-    <p class="lvl">A = ${DISP_A.ip} / ${DISP_A.userAgent}<br>B = ${DISP_B.ip} / ${DISP_B.userAgent}<br>Nivel 1: nunca bloquea. Nivel 2: B queda bloqueado igual (bloqueo global por usuario). Niveles 3, 4 y 5: B entra con solo 3 fallos, porque por identidad su IP (y user agent) son distintos. El nivel 5 recién bloquea a cualquiera al llegar a 30 fallos en total; usá el botón de abajo para verlo.</p>`;
-  }catch(e){$("out").textContent="No se pudo conectar con el servidor."}
-  btn.disabled=false;
-}
-
-async function demoGlobal(){
-  const btn=$("demoGlobal");btn.disabled=true;$("outGlobal").innerHTML="Ejecutando 30 intentos...";
-  try{
-    await post("/demo/reset",{});
-    const filas=[];
-    for(let i=1;i<=30;i++){
-      const ip=`${100+ (i%50)}.${i}.${(i*7)%250}.${(i*13)%250}`;
-      const ua=`Dispositivo-${i} / navegador-${i%5}`;
-      const r=await post("/login/nivel5",{username:"ana",password:"incorrecta",ip,userAgent:ua});
-      filas.push(`<tr><td>${i}</td><td>${ip}</td><td>${r.status}</td></tr>`);
-    }
-    const final=await post("/login/nivel5",{username:"ana",password:"Ana2026#",ip:"9.9.9.9",userAgent:"Dispositivo-final"});
-    $("outGlobal").innerHTML=`<table><tr><th>Intento</th><th>IP usada</th><th>Status</th></tr>${filas.slice(-5).map(f=>f).join("")}</table>
-    <p class="lvl">(se muestran los últimos 5 de 30)</p>
-    <p class="lvl"><b>Intento 31, con la contraseña correcta desde una IP nunca usada:</b> status ${final.status} — ${final.ok?"entró":"bloqueado"}. ${final.msg}</p>`;
-  }catch(e){$("outGlobal").textContent="No se pudo conectar con el servidor."}
-  btn.disabled=false;
+    setMsg("Se reiniciaron todos los bloqueos y contadores del servidor.","ok");
+  }catch(e){setMsg("No se pudo conectar con el servidor.","er")}
 }
 
 $("go").onclick=enviar;$("p").onkeydown=e=>{if(e.key==="Enter")enviar()};
-$("otraIp").onclick=otraIp;$("otroUa").onclick=otroUa;$("demo").onclick=demo;$("demoGlobal").onclick=demoGlobal;
+$("otraIp").onclick=otraIp;$("otroUa").onclick=otroUa;$("reset").onclick=resetBloqueo;
 render();
 </script>
 </body>

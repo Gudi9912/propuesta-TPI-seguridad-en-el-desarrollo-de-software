@@ -29,3 +29,12 @@ Construimos un mismo sistema de login en 5 niveles de seguridad creciente, para 
 ## Conclusión
 
 La seguridad frente a la fuerza bruta no es simplemente "tener un límite de intentos", sino diseñar bien qué se cuenta y a qué nivel. Un criterio demasiado estricto (nivel 2) genera bloqueos injustos; uno demasiado específico (niveles 3 y 4) es evadible; un buen diseño combina ambos enfoques (nivel 5) para ser resistente sin sacrificar la experiencia del usuario legítimo.
+
+
+## USO DEL SCRIPT
+- python fuerza-bruta.py
+- python fuerza-bruta.py --nivel 3          # evade el bloqueo rotando IP
+- python fuerza-bruta.py --nivel 4          # evade rotando IP y user agent
+- python fuerza-bruta.py --nivel 5          # misma estrategia, pero falla
+- python fuerza-bruta.py --usuario ana
+- python fuerza-bruta.py --wordlist claves.txt
