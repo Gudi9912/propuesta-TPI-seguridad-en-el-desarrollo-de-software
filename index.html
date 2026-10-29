@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login con bloqueo por niveles</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1a1d23;--mu:#5d6572;--bd:#d9dde3;--ac:#2457d6;--ok:#1a7f45;--er:#c0302b;--wa:#a35f00}
+@media (prefers-color-scheme:dark){:root{--bg:#14161a;--card:#1d2026;--tx:#e8eaee;--mu:#9aa3b0;--bd:#323741;--ac:#6b93ff;--ok:#4cc582;--er:#ff7b72;--wa:#f0b04a}}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:520px;margin:0 auto;padding:24px 16px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 4px}p.s{color:var(--mu);margin:0 0 16px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tabs button{flex:1;padding:10px 4px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:8px;cursor:pointer;font:inherit}
+.tabs button[aria-selected="true"]{border-color:var(--ac);color:var(--ac);font-weight:600}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:16px}
+.lvl{color:var(--mu);font-size:13px;margin:0 0 4px}
+label{display:block;font-size:13px;color:var(--mu);margin:10px 0 3px}
+input{width:100%;box-sizing:border-box;padding:9px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--tx);font:inherit}
+.btn{margin-top:14px;width:100%;padding:11px;border:0;border-radius:8px;background:var(--ac);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+.btn.sec{background:transparent;color:var(--ac);border:1px solid var(--ac);margin-top:8px}
+.msg{margin-top:12px;padding:10px;border-radius:6px;border:1px solid var(--bd);min-height:20px}
+.ok{color:var(--ok)}.er{color:var(--er)}.wa{color:var(--wa)}
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+th,td{border:1px solid var(--bd);padding:6px;text-align:left}
+.sc{overflow-x:auto}
+.dos{display:flex;gap:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Login con bloqueo por niveles</h1>
+<p class="s">Usuarios de prueba: admin / Clave123! y ana / Ana2026#</p>
+
+<div class="tabs" id="tabs" role="tablist"></div>
+<div class="card">
+  <p class="lvl" id="desc"></p>
+  <label for="u">Usuario</label><input id="u" autocomplete="username" value="admin">
+  <label for="p">Contraseña</label><input id="p" type="password" autocomplete="current-password">
+  <label for="ip">IP</label><input id="ip" value="192.168.1.10">
+  <label for="ua">User agent</label><input id="ua">
+  <button class="btn" id="go">Ingresar</button>
+  <div class="dos">
+    <button class="btn sec" id="otraIp" type="button">Cambiar solo la IP</button>
+    <button class="btn sec" id="otroUa" type="button">Cambiar solo el user agent</button>
+  </div>
+  <div class="msg" id="msg" aria-live="polite"></div>
+</div>
+
+<div class="card">
+  <h2>Demo: comparar los 4 niveles</h2>
+  <p class="lvl">Reinicia los bloqueos, hace 3 intentos fallidos con ana desde el dispositivo A en cada nivel y luego intenta entrar con la contraseña correcta desde el dispositivo B (otra IP y otro user agent).</p>
+  <button class="btn" id="demo">Ejecutar demo</button>
+  <div class="sc" id="out"></div>
+</div>
+
+<div class="card">
+  <h2>Demo: bloqueo global del nivel 5 (30 fallos en total)</h2>
+  <p class="lvl">Reinicia los bloqueos y hace 30 intentos fallidos con ana contra el nivel 5, rotando IP y user agent en cada uno (simula un ataque distribuido). El intento 31, con la contraseña correcta, debería salir bloqueado igual.</p>
+  <button class="btn" id="demoGlobal">Ejecutar demo del nivel 5</button>
+  <div class="sc" id="outGlobal"></div>
+</div>
+</main>
+<script>
+const NIVELES=[
+ {t:"Nivel 1",d:"Sin bloqueo: se puede intentar infinitas veces.",url:"/login/nivel1"},
+ {t:"Nivel 2",d:"Bloqueo por usuario.",url:"/login/nivel2"},
+ {t:"Nivel 3",d:"Bloqueo por usuario + IP.",url:"/login/nivel3"},
+ {t:"Nivel 4",d:"Bloqueo por usuario + IP + user agent.",url:"/login/nivel4"},
+ {t:"Nivel 5",d:"Como el nivel 4, y además bloquea la cuenta al acumular 30 fallos en total, vengan de donde vengan (detecta ataques distribuidos).",url:"/login/nivel5"}];
+const DISP_A={ip:"10.0.0.1",userAgent:"Chrome/120 (Windows 11)"};
+const DISP_B={ip:"172.16.5.9",userAgent:"Safari/17 (iPhone)"};
+let n=0,timer=null;
+const $=id=>document.getElementById(id);
+const fmt=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+const post=(url,body)=>fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(async r=>({status:r.status,...await r.json()}));
+
+$("ua").value=navigator.userAgent;
+function render(){
+  $("tabs").innerHTML=NIVELES.map((x,i)=>`<button role="tab" aria-selected="${i===n}" data-i="${i}">${x.t}</button>`).join("");
+  $("tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{n=+b.dataset.i;clearInterval(timer);setMsg("","");render()});
+  $("desc").textContent=NIVELES[n].d;
+}
+function setMsg(t,c){$("msg").textContent=t;$("msg").className="msg "+c}
+
+async function enviar(){
+  clearInterval(timer);
+  const body={username:$("u").value.trim(),password:$("p").value,ip:$("ip").value.trim(),userAgent:$("ua").value};
+  if(!body.ip)delete body.ip;if(!body.userAgent)delete body.userAgent; // si faltan, el servidor usa los de la conexión
+  try{
+    const d=await post(NIVELES[n].url,body);
+    if(d.ok)setMsg(d.msg,"ok");
+    else if(d.status===429){
+      let seg=d.restanteSegundos;
+      const tick=()=>{if(seg<=0){clearInterval(timer);setMsg("El bloqueo terminó. Ya puedes intentar de nuevo.","ok");return}
+        setMsg(d.msg+" Tiempo restante: "+fmt(seg),"wa");seg--};
+      tick();timer=setInterval(tick,1000);
+    }else setMsg(d.msg,"er");
+  }catch(e){setMsg("No se pudo conectar con el servidor.","er")}
+  $("p").value="";
+}
+
+const r=()=>Math.floor(Math.random()*254)+1;
+function otraIp(){
+  $("ip").value=`${r()}.${r()}.${r()}.${r()}`;
+  setMsg("IP cambiada. El user agent sigue igual.","wa");
+}
+function otroUa(){
+  const uas=["Firefox/121 (Linux)","Safari/17 (iPhone)","Chrome/120 (Android)","Edge/120 (Windows 10)"];
+  $("ua").value=uas[Math.floor(Math.random()*uas.length)]+" #"+r();
+  setMsg("User agent cambiado. La IP sigue igual.","wa");
+}
+
+async function demo(){
+  const btn=$("demo");btn.disabled=true;$("out").innerHTML="Ejecutando...";
+  try{
+    await post("/demo/reset",{});
+    const filas=[];
+    for(let i=0;i<NIVELES.length;i++){
+      const nivel=NIVELES[i];
+      let ultimo;
+      for(let k=0;k<3;k++)ultimo=await post(nivel.url,{username:"ana",password:"incorrecta",...DISP_A});
+      const b=await post(nivel.url,{username:"ana",password:"Ana2026#",...DISP_B});
+      filas.push(`<tr><td>${nivel.t}</td><td>${ultimo.status}</td><td>${b.status}</td><td>${b.ok?"Entró":"Bloqueado"}</td></tr>`);
+    }
+    $("out").innerHTML=`<table><tr><th>Nivel</th><th>3 fallos desde A</th><th>Correcta desde B</th><th>Resultado desde B</th></tr>${filas.join("")}</table>
+    <p class="lvl">A = ${DISP_A.ip} / ${DISP_A.userAgent}<br>B = ${DISP_B.ip} / ${DISP_B.userAgent}<br>Nivel 1: nunca bloquea. Nivel 2: B queda bloqueado igual (bloqueo global por usuario). Niveles 3, 4 y 5: B entra con solo 3 fallos, porque por identidad su IP (y user agent) son distintos. El nivel 5 recién bloquea a cualquiera al llegar a 30 fallos en total; usá el botón de abajo para verlo.</p>`;
+  }catch(e){$("out").textContent="No se pudo conectar con el servidor."}
+  btn.disabled=false;
+}
+
+async function demoGlobal(){
+  const btn=$("demoGlobal");btn.disabled=true;$("outGlobal").innerHTML="Ejecutando 30 intentos...";
+  try{
+    await post("/demo/reset",{});
+    const filas=[];
+    for(let i=1;i<=30;i++){
+      const ip=`${100+ (i%50)}.${i}.${(i*7)%250}.${(i*13)%250}`;
+      const ua=`Dispositivo-${i} / navegador-${i%5}`;
+      const r=await post("/login/nivel5",{username:"ana",password:"incorrecta",ip,userAgent:ua});
+      filas.push(`<tr><td>${i}</td><td>${ip}</td><td>${r.status}</td></tr>`);
+    }
+    const final=await post("/login/nivel5",{username:"ana",password:"Ana2026#",ip:"9.9.9.9",userAgent:"Dispositivo-final"});
+    $("outGlobal").innerHTML=`<table><tr><th>Intento</th><th>IP usada</th><th>Status</th></tr>${filas.slice(-5).map(f=>f).join("")}</table>
+    <p class="lvl">(se muestran los últimos 5 de 30)</p>
+    <p class="lvl"><b>Intento 31, con la contraseña correcta desde una IP nunca usada:</b> status ${final.status} — ${final.ok?"entró":"bloqueado"}. ${final.msg}</p>`;
+  }catch(e){$("outGlobal").textContent="No se pudo conectar con el servidor."}
+  btn.disabled=false;
+}
+
+$("go").onclick=enviar;$("p").onkeydown=e=>{if(e.key==="Enter")enviar()};
+$("otraIp").onclick=otraIp;$("otroUa").onclick=otroUa;$("demo").onclick=demo;$("demoGlobal").onclick=demoGlobal;
+render();
+</script>
+</body>
+</html>
